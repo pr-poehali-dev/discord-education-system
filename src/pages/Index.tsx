@@ -45,10 +45,10 @@ const INITIAL_USERS: UserRecord[] = [
     progress: { lecturesListened: [], practicesDone: [], examsPassed: [] },
   },
   {
-    id: "2", login: "deputy1", password: "deputy123",
-    name: "Сидоров Виктор Константинович", tabNumber: "АВ-0002",
+    id: "2", login: "686702", password: "686702",
+    name: "Андрейченко Иван", tabNumber: "686-702",
     role: "deputy", rank: "sergeant",
-    joinDate: "01.01.2026",
+    joinDate: "12.06.2026",
     progress: { lecturesListened: [], practicesDone: [], examsPassed: [] },
   },
   {
