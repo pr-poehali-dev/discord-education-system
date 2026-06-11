@@ -28,13 +28,13 @@ const mockUser = {
 
 const lectures = {
   p2j: [
-    { id: "l1", type: "Лекция", title: "Вступительная лекция", link: "https://docs.google.com/presentation" },
-    { id: "l2", type: "Лекция", title: "ФЗ о ФСВНГ и Устав ФСВНГ", link: "https://docs.google.com/document" },
+    { id: "l1", type: "Лекция", title: "Вступительная лекция", link: "https://docs.google.com/presentation/d/1TunNnou9K9ZH_QDsmx0N-OKhSSRQot6o6J09dMgcp5c/edit?usp=sharing" },
+    { id: "l2", type: "Лекция", title: "ФЗ о ФСВНГ и Устав ФСВНГ", link: "https://docs.google.com/document/d/1fir1wtveTcp5n5MQ-dJ25syfUWJ_QsyOaxjpjx6Vci8/edit?usp=sharing" },
     { id: "l3", type: "Экзамен", title: "Тест: Устав ФСВНГ + ФЗ о ФСВНГ", link: "https://discord.com" },
   ],
   j2s: [
-    { id: "l4", type: "Лекция", title: "УК, ПК, КоАП", link: "https://docs.google.com/presentation" },
-    { id: "l5", type: "Лекция", title: "Допуск к закрытой и охраняемой территории", link: "https://docs.google.com/presentation" },
+    { id: "l4", type: "Лекция", title: "УК, ПК, КоАП", link: "https://docs.google.com/presentation/d/18NqJPtXdvhpl5ChP-1VRfBP77ZsCmVSYOhGbDVqdygA/edit?usp=sharing" },
+    { id: "l5", type: "Лекция", title: "Допуск к закрытой и охраняемой территории", link: "https://docs.google.com/presentation/d/1rk_v4cruYlBn4gd1zI2jgemZycuJnQqYseNnP5ARsG8/edit?usp=sharing" },
     { id: "l6", type: "Экзамен", title: "Тесты: УК, ПК, КоАП", link: "https://discord.com" },
   ],
 };
