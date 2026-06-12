@@ -4,7 +4,7 @@ import Icon from "@/components/ui/icon";
 // ─── Types ────────────────────────────────────────────────
 type Role = "cadet" | "jr_instructor" | "instructor" | "deputy" | "chief";
 type Rank = "private" | "jr_sergeant" | "sergeant";
-type Page = "home" | "profile" | "cadets" | "report" | "exams" | "stats" | "moderation";
+type Page = "home" | "profile" | "cadets" | "report" | "report_instr" | "exams" | "stats" | "moderation" | "blacklist";
 
 const ROLE_LABEL: Record<Role, string> = {
   cadet: "Курсант", jr_instructor: "Мл. инструктор",
@@ -31,6 +31,12 @@ type ExamRequest = {
   id: number; authorId: string; authorName: string; tabNumber: string;
   examTitle: string; rank: Rank; date: string;
   status: "pending" | "answered"; answer?: string; answeredBy?: string;
+};
+
+// ─── Blacklist ────────────────────────────────────────────
+type BlacklistEntry = {
+  id: number; name: string; tabNumber: string; reason: string;
+  addedBy: string; date: string;
 };
 
 // ─── Reports ─────────────────────────────────────────────
@@ -108,6 +114,14 @@ export default function Index() {
   const [currentUser, setCurrent]   = useState<UserRecord | null>(null);
   const [reports, setReports]       = useState<Report[]>([]);
   const [examReqs, setExamReqs]     = useState<ExamRequest[]>([]);
+  const [blacklist, setBlacklist]   = useState<BlacklistEntry[]>([
+    { id: 1, name: "Васильев Иван", tabNumber: "111-222", reason: "Нарушение устава", addedBy: "Романов А.И.", date: "01.06.2026" },
+  ]);
+  const [blName, setBlName]         = useState("");
+  const [blTab, setBlTab]           = useState("");
+  const [blReason, setBlReason]     = useState("");
+  const [blMsg, setBlMsg]           = useState("");
+  const [viewReportId, setViewReportId] = useState<number | null>(null);
   const [page, setPage]             = useState<Page>("home");
   const [mobileMenu, setMobileMenu] = useState(false);
 
@@ -324,13 +338,15 @@ export default function Index() {
   // Nav per role
   type NavItem = { page: Page; icon: string; label: string };
   const NAV: NavItem[] = [
-    { page: "home",    icon: "BookOpen",    label: "Лекции" },
-    { page: "profile", icon: "User",        label: "Профиль" },
-    { page: "exams",   icon: "MessageSquare", label: "Экзамены" },
-    { page: "report",  icon: "FileText",    label: "Рапорт" },
-    ...(canInstr ? [{ page: "cadets" as Page,   icon: "Users",  label: "Курсанты" }] : []),
-    ...(canInstr ? [{ page: "stats"  as Page,   icon: "BarChart3", label: "Статистика" }] : []),
-    ...(canMod   ? [{ page: "moderation" as Page, icon: "ShieldAlert", label: "Модерация" }] : []),
+    { page: "home",         icon: "BookOpen",      label: "Лекции" },
+    { page: "profile",      icon: "User",           label: "Профиль" },
+    { page: "exams",        icon: "MessageSquare",  label: "Экзамены" },
+    { page: "report",       icon: "FileText",       label: "Рапорт" },
+    ...(canInstr ? [{ page: "report_instr" as Page, icon: "ClipboardList", label: "Рапорты" }] : []),
+    ...(canInstr ? [{ page: "cadets"       as Page, icon: "Users",         label: "Курсанты" }] : []),
+    ...(canInstr ? [{ page: "stats"        as Page, icon: "BarChart3",     label: "Статистика" }] : []),
+    ...(canMod   ? [{ page: "blacklist"    as Page, icon: "Ban",           label: "Чёрный список" }] : []),
+    ...(canMod   ? [{ page: "moderation"   as Page, icon: "ShieldAlert",   label: "Модерация" }] : []),
   ];
 
   const selectedCadetUser = selCadet ? users.find(u => u.id === selCadet) : null;
@@ -947,6 +963,186 @@ export default function Index() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ РАПОРТЫ (инструктор) ══ */}
+        {page === "report_instr" && canInstr && (
+          <div className="space-y-6 animate-slide-up">
+            <div className="border-b-2 border-[hsl(220,60%,28%)] pb-3 mb-6">
+              <h1 className="font-oswald text-3xl font-bold text-foreground tracking-wide">Рапорты курсантов</h1>
+              <p className="text-muted-foreground text-sm mt-0.5">Просмотр, фото и одобрение рапортов</p>
+            </div>
+
+            {reports.length === 0 && (
+              <div className="bg-white rounded-xl border border-border shadow-sm p-8 text-center">
+                <Icon name="FileText" size={32} className="text-muted-foreground/40 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">Рапортов пока не поступало</p>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {reports.map(r => {
+                const isOpen = viewReportId === r.id;
+                return (
+                  <div key={r.id} className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+                    {/* Header row */}
+                    <div className="px-6 py-4 flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-bold text-foreground">{r.authorName}</p>
+                          <span className="font-mono text-xs text-muted-foreground">{r.tabNumber}</span>
+                          <span className={`status-badge ${STATUS_MAP[r.status].cls}`}>{STATUS_MAP[r.status].label}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{r.direction} · {r.date}</p>
+                        {r.signature && <p className="text-xs text-muted-foreground">Подпись: {r.signature}</p>}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {canMod && (
+                          <>
+                            <button onClick={() => setReports(p => p.map(x => x.id===r.id?{...x,status:"approved"}:x))} className="text-xs px-3 py-1.5 rounded bg-green-100 text-green-700 border border-green-200 font-bold hover:bg-green-200 transition-colors">Одобрить</button>
+                            <button onClick={() => setReports(p => p.map(x => x.id===r.id?{...x,status:"rejected"}:x))} className="text-xs px-3 py-1.5 rounded bg-red-100 text-red-700 border border-red-200 font-bold hover:bg-red-200 transition-colors">Отклонить</button>
+                          </>
+                        )}
+                        <button onClick={() => setViewReportId(isOpen ? null : r.id)}
+                          className="text-xs px-3 py-1.5 rounded bg-secondary border border-border font-bold text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+                          <Icon name={isOpen ? "ChevronUp" : "ChevronDown"} size={13} />
+                          {isOpen ? "Свернуть" : "Подробнее"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expanded view */}
+                    {isOpen && (
+                      <div className="border-t border-border px-6 py-5 space-y-5 animate-fade-in">
+                        {/* Photo */}
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">Фото</p>
+                          {r.photoUrl ? (
+                            <img src={r.photoUrl} alt="фото рапорта" className="max-w-xs rounded-xl border border-border shadow-sm" />
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">Фото не прикреплено</p>
+                          )}
+                        </div>
+
+                        {/* Lectures snapshot */}
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">Лекции</p>
+                          <div className="space-y-1.5">
+                            {r.lecturesSnapshot.map((s, i) => (
+                              <div key={i} className="flex items-center gap-2 text-sm">
+                                <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${s.done ? "bg-green-100 border-green-400" : "border-border"}`}>
+                                  {s.done && <Icon name="Check" size={10} className="text-green-600" />}
+                                </div>
+                                <span className={s.done ? "text-foreground font-semibold" : "text-muted-foreground"}>{s.title}</span>
+                                {s.confirmLink && (
+                                  <a href={s.confirmLink} target="_blank" rel="noopener noreferrer" className="text-xs text-[hsl(220,60%,28%)] underline ml-1">↗ ссылка</a>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Practices snapshot */}
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">Практика</p>
+                          <div className="space-y-1.5">
+                            {r.practicesSnapshot.map((s, i) => (
+                              <div key={i} className="flex items-center gap-2 text-sm">
+                                <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${s.done ? "bg-green-100 border-green-400" : "border-border"}`}>
+                                  {s.done && <Icon name="Check" size={10} className="text-green-600" />}
+                                </div>
+                                <span className={s.done ? "text-foreground font-semibold" : "text-muted-foreground"}>{s.title}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ══ ЧЁРНЫЙ СПИСОК ══ */}
+        {page === "blacklist" && canMod && (
+          <div className="space-y-6 animate-slide-up">
+            <div className="border-b-2 border-red-500 pb-3 mb-6">
+              <h1 className="font-oswald text-3xl font-bold text-foreground tracking-wide">Чёрный список</h1>
+              <p className="text-muted-foreground text-sm mt-0.5">Лица, которым запрещён вход в АВНГ</p>
+            </div>
+
+            {/* Add form */}
+            <div className="bg-white rounded-xl border border-t-[3px] border-t-red-500 border-border shadow-sm p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Icon name="UserX" size={18} className="text-red-500" />
+                <h2 className="font-oswald text-base font-bold uppercase tracking-widest text-foreground">Добавить в чёрный список</h2>
+              </div>
+              <div className="grid sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wide text-foreground mb-1.5 block">ФИО</label>
+                  <input value={blName} onChange={e => setBlName(e.target.value)} placeholder="Фамилия Имя"
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-red-400" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wide text-foreground mb-1.5 block">Таб. номер</label>
+                  <input value={blTab} onChange={e => setBlTab(e.target.value)} placeholder="XXX-XXX"
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-red-400" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wide text-foreground mb-1.5 block">Причина</label>
+                  <input value={blReason} onChange={e => setBlReason(e.target.value)} placeholder="Причина занесения"
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-red-400" />
+                </div>
+              </div>
+              {blMsg && <p className={`mt-3 text-sm font-semibold ${blMsg.startsWith("✓") ? "text-green-600" : "text-red-600"}`}>{blMsg}</p>}
+              <button
+                onClick={() => {
+                  if (!blName || !blReason) { setBlMsg("Заполните ФИО и причину"); return; }
+                  setBlacklist(p => [{ id: Date.now(), name: blName, tabNumber: blTab, reason: blReason, addedBy: cu.name, date: new Date().toLocaleDateString("ru-RU") }, ...p]);
+                  setBlMsg("✓ Добавлен в чёрный список");
+                  setBlName(""); setBlTab(""); setBlReason("");
+                }}
+                className="mt-4 flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-sm transition-colors">
+                <Icon name="UserX" size={14} /> Внести в список
+              </button>
+            </div>
+
+            {/* List */}
+            <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+              <div className="px-6 py-3 border-b border-border bg-red-50 flex items-center justify-between">
+                <span className="font-oswald text-sm font-bold uppercase tracking-widest text-red-700">Записи</span>
+                <span className="text-xs text-red-500 font-bold">{blacklist.length} чел.</span>
+              </div>
+              {blacklist.length === 0 ? (
+                <p className="px-6 py-5 text-sm text-muted-foreground">Список пуст</p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {blacklist.map(b => (
+                    <div key={b.id} className="px-6 py-4 flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-full bg-red-100 border border-red-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <Icon name="UserX" size={16} className="text-red-500" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-foreground">{b.name}</p>
+                          {b.tabNumber && <p className="text-xs font-mono text-muted-foreground">{b.tabNumber}</p>}
+                          <p className="text-xs text-red-600 font-semibold mt-0.5">Причина: {b.reason}</p>
+                          <p className="text-xs text-muted-foreground">Внёс: {b.addedBy} · {b.date}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setBlacklist(p => p.filter(x => x.id !== b.id))}
+                        className="text-xs px-3 py-1.5 rounded bg-secondary border border-border text-muted-foreground hover:text-red-600 hover:border-red-300 font-bold transition-colors flex-shrink-0">
+                        Удалить
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
