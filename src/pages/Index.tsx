@@ -1,5 +1,16 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Icon from "@/components/ui/icon";
+
+const API = "https://functions.poehali.dev/8b907f25-a8c7-45ad-a766-3602ffe63a40";
+
+async function api(body: Record<string, unknown>) {
+  const res = await fetch(API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
 
 // ─── Types ────────────────────────────────────────────────
 type Role = "cadet" | "jr_instructor" | "instructor" | "deputy" | "chief";
@@ -51,14 +62,6 @@ type Report = {
 // ─── Data ─────────────────────────────────────────────────
 const mkProgress = (): Progress => ({ lecturesChecked: {}, practicesDone: {} });
 
-const INITIAL_USERS: UserRecord[] = [
-  { id: "1", login: "chief", password: "admin123", name: "Романов Александр Игоревич", tabNumber: "000-001", role: "chief", rank: "sergeant", joinDate: "01.01.2026", progress: mkProgress() },
-  { id: "2", login: "686702", password: "686702", name: "Андрейченко Иван", tabNumber: "686-702", role: "deputy", rank: "sergeant", joinDate: "12.06.2026", isSuperAdmin: true, progress: mkProgress() },
-  { id: "3", login: "instr1", password: "instr123", name: "Кузнецов Павел Андреевич", tabNumber: "000-010", role: "instructor", rank: "jr_sergeant", joinDate: "10.02.2026", progress: mkProgress() },
-  { id: "4", login: "ivanov", password: "pass1234", name: "Иванов Дмитрий Сергеевич", tabNumber: "000-100", role: "cadet", rank: "private", joinDate: "15.03.2026", progress: mkProgress() },
-  { id: "5", login: "petrov", password: "pass5678", name: "Петров Андрей Викторович", tabNumber: "000-101", role: "cadet", rank: "private", joinDate: "15.03.2026", progress: mkProgress() },
-];
-
 const LECTURES_P2J = [
   { id: "l1", type: "Лекция", title: "Вступительная лекция", link: "https://docs.google.com/presentation/d/1TunNnou9K9ZH_QDsmx0N-OKhSSRQot6o6J09dMgcp5c/edit?usp=sharing" },
   { id: "l2", type: "Лекция", title: "ФЗ о ФСВНГ и Устав ФСВНГ", link: "https://docs.google.com/document/d/1fir1wtveTcp5n5MQ-dJ25syfUWJ_QsyOaxjpjx6Vci8/edit?usp=sharing" },
@@ -84,9 +87,6 @@ const PRACTICES_J2S = [
   { id: "q4", title: "Экзамен: Штраф (практика)", desc: "Приём инструктором — прикрепи фото", group: "exam" },
   { id: "q5", title: "Экзамен: Задержание (практика)", desc: "Приём инструктором — прикрепи фото", group: "exam" },
   { id: "q6", title: "Экзамен: Арест (практика)", desc: "Приём инструктором — прикрепи фото", group: "exam" },
-  { id: "q7", title: "Экзамен: УК (теория)", desc: "Тест — канал #экзамен-2", group: "exam" },
-  { id: "q8", title: "Экзамен: ПК (теория)", desc: "Тест — канал #экзамен-2", group: "exam" },
-  { id: "q9", title: "Экзамен: КоАП (теория)", desc: "Тест — канал #экзамен-2", group: "exam" },
 ];
 
 function getLecturesFor(rank: Rank) {
@@ -110,13 +110,12 @@ const RANK_COLOR: Record<Rank, string> = {
 
 // ─── Component ────────────────────────────────────────────
 export default function Index() {
-  const [users, setUsers]           = useState<UserRecord[]>(INITIAL_USERS);
+  const [users, setUsers]           = useState<UserRecord[]>([]);
   const [currentUser, setCurrent]   = useState<UserRecord | null>(null);
   const [reports, setReports]       = useState<Report[]>([]);
   const [examReqs, setExamReqs]     = useState<ExamRequest[]>([]);
-  const [blacklist, setBlacklist]   = useState<BlacklistEntry[]>([
-    { id: 1, name: "Васильев Иван", tabNumber: "111-222", reason: "Нарушение устава", addedBy: "Романов А.И.", date: "01.06.2026" },
-  ]);
+  const [blacklist, setBlacklist]   = useState<BlacklistEntry[]>([]);
+  const [loading, setLoading]       = useState(false);
   const [blName, setBlName]         = useState("");
   const [blTab, setBlTab]           = useState("");
   const [blReason, setBlReason]     = useState("");
@@ -164,146 +163,132 @@ export default function Index() {
   const isChief     = currentUser?.role === "chief";
   const isSuperAdmin = !!currentUser?.isSuperAdmin;
 
+  // ── Load shared data after login ──
+  const loadAll = useCallback(async () => {
+    const [uRes, rRes, eRes, bRes] = await Promise.all([
+      api({ action: "get_users" }),
+      api({ action: "get_reports" }),
+      api({ action: "get_exams" }),
+      api({ action: "get_blacklist" }),
+    ]);
+    if (uRes.users) setUsers(uRes.users.map((u: UserRecord) => ({ ...u, id: String(u.id) })));
+    if (rRes.reports) setReports(rRes.reports.map((r: Report) => ({ ...r, id: Number(r.id), authorId: String(r.authorId) })));
+    if (eRes.exams) setExamReqs(eRes.exams.map((e: ExamRequest) => ({ ...e, id: Number(e.id), authorId: String(e.authorId) })));
+    if (bRes.blacklist) setBlacklist(bRes.blacklist.map((b: BlacklistEntry) => ({ ...b, id: Number(b.id) })));
+  }, []);
+
+  useEffect(() => { if (currentUser) loadAll(); }, [currentUser, loadAll]);
+
   function syncUser(u: UserRecord) {
     setUsers(prev => prev.map(x => x.id === u.id ? u : x));
     if (currentUser?.id === u.id) setCurrent(u);
   }
 
   // ── Login ──
-  function handleLogin() {
-    const u = users.find(u => u.login === loginVal && u.password === passVal);
-    if (!u) { setLoginErr("Неверный логин или пароль"); return; }
-    setCurrent({ ...u });
+  async function handleLogin() {
+    setLoading(true);
+    const res = await api({ action: "login", login: loginVal, password: passVal });
+    setLoading(false);
+    if (res.error) { setLoginErr(res.error); return; }
+    const u = { ...res.user, id: String(res.user.id) };
+    setCurrent(u);
     setLoginErr(""); setLoginVal(""); setPassVal("");
   }
 
   // ── Register ──
-  function handleRegister() {
+  async function handleRegister() {
     if (!regName || !regLogin || !regPass || !regTab) { setRegMsg("Заполните все поля"); return; }
-    if (users.find(u => u.login === regLogin)) { setRegMsg("Логин уже занят"); return; }
-    const nu: UserRecord = {
-      id: String(Date.now()), login: regLogin, password: regPass,
-      name: regName, tabNumber: regTab, role: regRole, rank: "private",
-      joinDate: new Date().toLocaleDateString("ru-RU"), progress: mkProgress(),
-    };
+    const res = await api({ action: "register", login: regLogin, password: regPass, name: regName, tabNumber: regTab, role: regRole });
+    if (res.error) { setRegMsg(res.error); return; }
+    const nu = { ...res.user, id: String(res.user.id) };
     setUsers(p => [...p, nu]);
     setRegMsg(`✓ Создан. Логин: ${regLogin}  Пароль: ${regPass}`);
     setRegName(""); setRegLogin(""); setRegPass(""); setRegTab(""); setRegRole("cadet");
   }
 
   // ── Instructor: check lecture ──
-  function checkLecture(userId: string, lectureId: string, done: boolean, confirmLink: string) {
+  async function checkLecture(userId: string, lectureId: string, done: boolean, confirmLink: string) {
+    await api({ action: "check_lecture", userId: Number(userId), lectureId, done, confirmLink, confirmedBy: currentUser?.name || "" });
     const u = users.find(u => u.id === userId)!;
-    const updated: UserRecord = {
-      ...u,
-      progress: {
-        ...u.progress,
-        lecturesChecked: {
-          ...u.progress.lecturesChecked,
-          [lectureId]: { done, confirmLink, confirmedBy: currentUser?.name },
-        },
-      },
-    };
-    syncUser(updated);
+    syncUser({ ...u, progress: { ...u.progress, lecturesChecked: { ...u.progress.lecturesChecked, [lectureId]: { done, confirmLink, confirmedBy: currentUser?.name } } } });
   }
 
   // ── Instructor: check practice ──
-  function checkPractice(userId: string, practiceId: string, done: boolean) {
+  async function checkPractice(userId: string, practiceId: string, done: boolean) {
     const u = users.find(u => u.id === userId)!;
-    const updated: UserRecord = {
-      ...u,
-      progress: {
-        ...u.progress,
-        practicesDone: {
-          ...u.progress.practicesDone,
-          [practiceId]: {
-            done,
-            photoUrl: u.progress.practicesDone[practiceId]?.photoUrl,
-            confirmedBy: done ? currentUser?.name : undefined,
-          },
-        },
-      },
-    };
-    syncUser(updated);
+    const photoUrl = u.progress.practicesDone[practiceId]?.photoUrl || "";
+    await api({ action: "check_practice", userId: Number(userId), practiceId, done, photoUrl, confirmedBy: done ? (currentUser?.name || "") : "" });
+    syncUser({ ...u, progress: { ...u.progress, practicesDone: { ...u.progress.practicesDone, [practiceId]: { done, photoUrl, confirmedBy: done ? currentUser?.name : undefined } } } });
   }
 
   // ── Cadet: attach photo to practice ──
-  function attachPracticePhoto(practiceId: string, photoUrl: string) {
+  async function attachPracticePhoto(practiceId: string, photoUrl: string) {
     if (!cu) return;
     setCadetPracticePhotos(p => ({ ...p, [practiceId]: photoUrl }));
     const u = users.find(u => u.id === cu.id)!;
-    const updated: UserRecord = {
-      ...u,
-      progress: {
-        ...u.progress,
-        practicesDone: {
-          ...u.progress.practicesDone,
-          [practiceId]: {
-            ...u.progress.practicesDone[practiceId],
-            done: u.progress.practicesDone[practiceId]?.done || false,
-            photoUrl,
-          },
-        },
-      },
-    };
-    syncUser(updated);
+    const existing = u.progress.practicesDone[practiceId];
+    await api({ action: "check_practice", userId: Number(cu.id), practiceId, done: existing?.done || false, photoUrl, confirmedBy: existing?.confirmedBy || "" });
+    syncUser({ ...u, progress: { ...u.progress, practicesDone: { ...u.progress.practicesDone, [practiceId]: { ...existing, done: existing?.done || false, photoUrl } } } });
   }
 
   // ── Set rank ──
-  function setRank(userId: string, rank: Rank) {
+  async function setRank(userId: string, rank: Rank) {
+    await api({ action: "set_rank", userId: Number(userId), rank });
     const u = users.find(u => u.id === userId)!;
     syncUser({ ...u, rank });
   }
 
   // ── Set role ──
-  function setRole(userId: string, role: Role) {
+  async function setRole(userId: string, role: Role) {
+    await api({ action: "set_role", userId: Number(userId), role });
     const u = users.find(u => u.id === userId)!;
     syncUser({ ...u, role });
   }
 
   // ── Submit exam request ──
-  function submitExamRequest() {
+  async function submitExamRequest() {
     if (!currentUser || !examTitle) { setExamMsg("Укажите тему экзамена"); return; }
-    setExamReqs(p => [{
-      id: Date.now(), authorId: currentUser.id, authorName: currentUser.name,
+    const res = await api({ action: "add_exam", authorId: Number(currentUser.id), examTitle, rank: currentUser.rank });
+    const newReq: ExamRequest = {
+      id: res.id, authorId: currentUser.id, authorName: currentUser.name,
       tabNumber: currentUser.tabNumber, examTitle, rank: currentUser.rank,
       date: new Date().toLocaleDateString("ru-RU"), status: "pending",
-    }, ...p]);
+    };
+    setExamReqs(p => [newReq, ...p]);
     setExamMsg("✓ Запрос отправлен"); setExamTitle("");
   }
 
   // ── Answer exam request ──
-  function answerExam(id: number) {
+  async function answerExam(id: number) {
     const txt = answerMap[id];
     if (!txt) return;
-    setExamReqs(p => p.map(r => r.id === id
-      ? { ...r, status: "answered", answer: txt, answeredBy: currentUser?.name }
-      : r));
+    await api({ action: "answer_exam", examId: id, answer: txt, answeredBy: currentUser?.name || "" });
+    setExamReqs(p => p.map(r => r.id === id ? { ...r, status: "answered", answer: txt, answeredBy: currentUser?.name } : r));
     setAnswerMap(p => { const n = { ...p }; delete n[id]; return n; });
   }
 
   // ── Submit report ──
-  function submitReport() {
+  async function submitReport() {
     if (!currentUser) return;
     if (!repSign) { setRepMsg("Укажите подпись"); return; }
-    const { lectures, practices, label } = getLecturesFor(currentUser.rank);
+    const cu2 = users.find(u => u.id === currentUser.id) || currentUser;
+    const { lectures, practices, label } = getLecturesFor(cu2.rank);
     if (!label) { setRepMsg("Нет доступных аттестаций для вашего звания"); return; }
+    const lSnap = lectures.filter(l => l.type === "Лекция").map(l => ({
+      title: l.title, done: !!cu2.progress.lecturesChecked[l.id]?.done,
+      confirmLink: cu2.progress.lecturesChecked[l.id]?.confirmLink,
+    }));
+    const pSnap = practices.map(p => ({
+      title: p.title, done: !!cu2.progress.practicesDone[p.id]?.done,
+      photoUrl: cu2.progress.practicesDone[p.id]?.photoUrl,
+    }));
+    const res = await api({ action: "add_report", authorId: Number(currentUser.id), direction: label, signature: repSign, photoUrl: repPhotoUrl, lecturesSnapshot: lSnap, practicesSnapshot: pSnap });
     const nr: Report = {
-      id: Date.now(), authorId: currentUser.id,
-      authorName: currentUser.name, tabNumber: currentUser.tabNumber,
-      direction: label,
+      id: res.id, authorId: currentUser.id, authorName: currentUser.name,
+      tabNumber: currentUser.tabNumber, direction: label,
       date: new Date().toLocaleDateString("ru-RU"),
       status: "pending", signature: repSign, photoUrl: repPhotoUrl,
-      lecturesSnapshot: lectures.filter(l => l.type === "Лекция").map(l => ({
-        title: l.title,
-        done: !!currentUser.progress.lecturesChecked[l.id]?.done,
-        confirmLink: currentUser.progress.lecturesChecked[l.id]?.confirmLink,
-      })),
-      practicesSnapshot: practices.map(p => ({
-        title: p.title,
-        done: !!currentUser.progress.practicesDone[p.id]?.done,
-        photoUrl: currentUser.progress.practicesDone[p.id]?.photoUrl,
-      })),
+      lecturesSnapshot: lSnap, practicesSnapshot: pSnap,
     };
     setReports(prev => [nr, ...prev]);
     setRepMsg("✓ Рапорт отправлен"); setRepSign(""); setRepPhotoUrl(""); setRepPhotoName("");
@@ -344,8 +329,8 @@ export default function Index() {
                     className="w-full border border-border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-[hsl(220,60%,28%)] focus:ring-1 focus:ring-[hsl(220,60%,28%)]/20" />
                 </div>
                 {loginErr && <p className="text-red-600 text-xs font-semibold flex items-center gap-1"><Icon name="AlertCircle" size={13} />{loginErr}</p>}
-                <button onClick={handleLogin} className="w-full bg-[hsl(220,60%,28%)] hover:bg-[hsl(220,60%,22%)] text-white font-bold py-2.5 rounded-lg text-sm transition-colors">
-                  Войти
+                <button onClick={handleLogin} disabled={loading} className="w-full bg-[hsl(220,60%,28%)] hover:bg-[hsl(220,60%,22%)] disabled:opacity-60 text-white font-bold py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-2">
+                  {loading ? <><Icon name="Loader2" size={14} className="animate-spin" /> Вход...</> : "Войти"}
                 </button>
               </div>
             </div>
@@ -760,16 +745,18 @@ export default function Index() {
           <div className="space-y-6 animate-slide-up max-w-2xl">
             <div className="border-b-2 border-[hsl(220,60%,28%)] pb-3 mb-6">
               <h1 className="font-oswald text-3xl font-bold text-foreground tracking-wide">Рапорт</h1>
-              <p className="text-muted-foreground text-sm mt-0.5">Подача рапорта на повышение в звании — только Рядовой → Мл. сержант</p>
+              <p className="text-muted-foreground text-sm mt-0.5">Рядовой → Мл. сержант / Мл. сержант → Сержант</p>
             </div>
 
-            {cu.role === "cadet" && cu.rank === "private" ? (
+            {cu.role === "cadet" && (cu.rank === "private" || cu.rank === "jr_sergeant") ? (() => {
+              const { lectures: repLecs, practices: repPracs, label: repLabel } = getLecturesFor(cu.rank);
+              return (
               <div className="bg-white rounded-xl border border-t-[3px] border-t-[hsl(220,60%,28%)] border-border shadow-sm p-6 space-y-5">
                 {/* Snapshot */}
                 <div>
-                  <h3 className="font-oswald text-sm font-bold uppercase tracking-widest text-foreground mb-3">Текущий прогресс (Рядовой → Мл. сержант)</h3>
+                  <h3 className="font-oswald text-sm font-bold uppercase tracking-widest text-foreground mb-3">Прогресс: {repLabel}</h3>
                   <div className="space-y-1.5">
-                    {LECTURES_P2J.filter(l => l.type === "Лекция").map(l => {
+                    {repLecs.filter(l => l.type === "Лекция").map(l => {
                       const done = !!cu.progress.lecturesChecked[l.id]?.done;
                       return (
                         <div key={l.id} className="flex items-center gap-2 text-sm">
@@ -780,7 +767,7 @@ export default function Index() {
                         </div>
                       );
                     })}
-                    {PRACTICES_P2J.map(p => {
+                    {repPracs.map(p => {
                       const done = !!cu.progress.practicesDone[p.id]?.done;
                       return (
                         <div key={p.id} className="flex items-center gap-2 text-sm">
@@ -832,14 +819,10 @@ export default function Index() {
                   <Icon name="Send" size={14} /> Отправить рапорт
                 </button>
               </div>
-            ) : cu.rank !== "private" ? (
+              );
+            })() : (
               <div className="bg-secondary/40 rounded-xl border border-border p-6 text-center">
-                <Icon name="Info" size={24} className="text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground font-semibold">Рапорт на повышение подаётся только Рядовыми.</p>
-              </div>
-            ) : (
-              <div className="bg-secondary/40 rounded-xl border border-border p-6 text-center">
-                <p className="text-sm text-muted-foreground font-semibold">Рапорт доступен только курсантам.</p>
+                <p className="text-sm text-muted-foreground font-semibold">Рапорт доступен курсантам со званием Рядовой или Мл. сержант.</p>
               </div>
             )}
 
@@ -887,8 +870,8 @@ export default function Index() {
                     </div>
                     {canMod && (
                       <div className="flex gap-2">
-                        <button onClick={() => setReports(p => p.map(x => x.id===r.id?{...x,status:"approved"}:x))} className="text-xs px-3 py-1 rounded bg-green-100 text-green-700 border border-green-200 font-bold hover:bg-green-200 transition-colors">Одобрить</button>
-                        <button onClick={() => setReports(p => p.map(x => x.id===r.id?{...x,status:"rejected"}:x))} className="text-xs px-3 py-1 rounded bg-red-100 text-red-700 border border-red-200 font-bold hover:bg-red-200 transition-colors">Отклонить</button>
+                        <button onClick={async () => { await api({ action:"set_report_status", reportId: r.id, status:"approved" }); setReports(p => p.map(x => x.id===r.id?{...x,status:"approved"}:x)); }} className="text-xs px-3 py-1 rounded bg-green-100 text-green-700 border border-green-200 font-bold hover:bg-green-200 transition-colors">Одобрить</button>
+                        <button onClick={async () => { await api({ action:"set_report_status", reportId: r.id, status:"rejected" }); setReports(p => p.map(x => x.id===r.id?{...x,status:"rejected"}:x)); }} className="text-xs px-3 py-1 rounded bg-red-100 text-red-700 border border-red-200 font-bold hover:bg-red-200 transition-colors">Отклонить</button>
                       </div>
                     )}
                   </div>
@@ -1129,8 +1112,8 @@ export default function Index() {
                       <div className="flex items-center gap-2 flex-shrink-0">
                         {canMod && (
                           <>
-                            <button onClick={() => setReports(p => p.map(x => x.id===r.id?{...x,status:"approved"}:x))} className="text-xs px-3 py-1.5 rounded bg-green-100 text-green-700 border border-green-200 font-bold hover:bg-green-200 transition-colors">Одобрить</button>
-                            <button onClick={() => setReports(p => p.map(x => x.id===r.id?{...x,status:"rejected"}:x))} className="text-xs px-3 py-1.5 rounded bg-red-100 text-red-700 border border-red-200 font-bold hover:bg-red-200 transition-colors">Отклонить</button>
+                            <button onClick={async () => { await api({ action:"set_report_status", reportId: r.id, status:"approved" }); setReports(p => p.map(x => x.id===r.id?{...x,status:"approved"}:x)); }} className="text-xs px-3 py-1.5 rounded bg-green-100 text-green-700 border border-green-200 font-bold hover:bg-green-200 transition-colors">Одобрить</button>
+                            <button onClick={async () => { await api({ action:"set_report_status", reportId: r.id, status:"rejected" }); setReports(p => p.map(x => x.id===r.id?{...x,status:"rejected"}:x)); }} className="text-xs px-3 py-1.5 rounded bg-red-100 text-red-700 border border-red-200 font-bold hover:bg-red-200 transition-colors">Отклонить</button>
                           </>
                         )}
                         <button onClick={() => setViewReportId(isOpen ? null : r.id)}
@@ -1228,9 +1211,10 @@ export default function Index() {
               </div>
               {blMsg && <p className={`mt-3 text-sm font-semibold ${blMsg.startsWith("✓") ? "text-green-600" : "text-red-600"}`}>{blMsg}</p>}
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (!blName || !blReason) { setBlMsg("Заполните ФИО и причину"); return; }
-                  setBlacklist(p => [{ id: Date.now(), name: blName, tabNumber: blTab, reason: blReason, addedBy: cu.name, date: new Date().toLocaleDateString("ru-RU") }, ...p]);
+                  const res = await api({ action: "add_blacklist", name: blName, tabNumber: blTab, reason: blReason, addedBy: cu.name });
+                  setBlacklist(p => [{ id: res.id, name: blName, tabNumber: blTab, reason: blReason, addedBy: cu.name, date: new Date().toLocaleDateString("ru-RU") }, ...p]);
                   setBlMsg("✓ Добавлен в чёрный список");
                   setBlName(""); setBlTab(""); setBlReason("");
                 }}
@@ -1263,7 +1247,7 @@ export default function Index() {
                         </div>
                       </div>
                       <button
-                        onClick={() => setBlacklist(p => p.filter(x => x.id !== b.id))}
+                        onClick={async () => { await api({ action: "remove_blacklist", id: b.id }); setBlacklist(p => p.filter(x => x.id !== b.id)); }}
                         className="text-xs px-3 py-1.5 rounded bg-secondary border border-border text-muted-foreground hover:text-red-600 hover:border-red-300 font-bold transition-colors flex-shrink-0">
                         Удалить
                       </button>

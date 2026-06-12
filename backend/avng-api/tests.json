@@ -1,0 +1,49 @@
+{
+  "tests": [
+    {
+      "name": "Login wrong creds",
+      "method": "POST",
+      "path": "/?action=login",
+      "body": {"action": "login", "login": "nobody", "password": "wrong"},
+      "expectedStatus": 401,
+      "expectedBody": {"error": "Неверный логин или пароль"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get users",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "get_users"},
+      "expectedStatus": 200,
+      "expectedBody": {"users": []},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get reports",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "get_reports"},
+      "expectedStatus": 200,
+      "expectedBody": {"reports": []},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get exams",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "get_exams"},
+      "expectedStatus": 200,
+      "expectedBody": {"exams": []},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get blacklist",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "get_blacklist"},
+      "expectedStatus": 200,
+      "expectedBody": {"blacklist": []},
+      "bodyMatcher": "partial"
+    }
+  ]
+}
