@@ -78,15 +78,15 @@ const PRACTICES_P2J = [
   { id: "p6", title: "Участие в досмотровых мероприятиях", desc: "На двух собеседованиях" },
 ];
 const PRACTICES_J2S = [
-  { id: "q1", title: "Практика: Штраф", desc: "Отработка процедуры" },
-  { id: "q2", title: "Практика: Задержание", desc: "Отработка процедуры" },
-  { id: "q3", title: "Практика: Арест", desc: "Отработка процедуры" },
-  { id: "q4", title: "Экзамен: Штраф (практика)", desc: "Приём инструктором" },
-  { id: "q5", title: "Экзамен: Задержание (практика)", desc: "Приём инструктором" },
-  { id: "q6", title: "Экзамен: Арест (практика)", desc: "Приём инструктором" },
-  { id: "q7", title: "Экзамен: УК (теория)", desc: "Тест — канал #экзамен-2" },
-  { id: "q8", title: "Экзамен: ПК (теория)", desc: "Тест — канал #экзамен-2" },
-  { id: "q9", title: "Экзамен: КоАП (теория)", desc: "Тест — канал #экзамен-2" },
+  { id: "q1", title: "Практика: Штраф", desc: "Отработка процедуры оформления штрафа", group: "practice" },
+  { id: "q2", title: "Практика: Задержание", desc: "Отработка процедуры задержания", group: "practice" },
+  { id: "q3", title: "Практика: Арест", desc: "Отработка процедуры ареста", group: "practice" },
+  { id: "q4", title: "Экзамен: Штраф (практика)", desc: "Приём инструктором — прикрепи фото", group: "exam" },
+  { id: "q5", title: "Экзамен: Задержание (практика)", desc: "Приём инструктором — прикрепи фото", group: "exam" },
+  { id: "q6", title: "Экзамен: Арест (практика)", desc: "Приём инструктором — прикрепи фото", group: "exam" },
+  { id: "q7", title: "Экзамен: УК (теория)", desc: "Тест — канал #экзамен-2", group: "exam" },
+  { id: "q8", title: "Экзамен: ПК (теория)", desc: "Тест — канал #экзамен-2", group: "exam" },
+  { id: "q9", title: "Экзамен: КоАП (теория)", desc: "Тест — канал #экзамен-2", group: "exam" },
 ];
 
 function getLecturesFor(rank: Rank) {
@@ -155,6 +155,10 @@ export default function Index() {
   const [instrLink, setInstrLink]         = useState<Record<string, string>>({});
   const [practicePhotoUrl, setPracticePhotoUrl] = useState<Record<string, string>>({});
 
+  // ── Cadet practice photos (key = practiceId) ──
+  const [cadetPracticePhotos, setCadetPracticePhotos] = useState<Record<string, string>>({});
+  const practicePhotoRef = useRef<Record<string, HTMLInputElement | null>>({});
+
   const canModerate = currentUser?.role === "deputy" || currentUser?.role === "chief" || !!currentUser?.isSuperAdmin;
   const canInstruct = ["jr_instructor","instructor","deputy","chief"].includes(currentUser?.role || "") || !!currentUser?.isSuperAdmin;
   const isChief     = currentUser?.role === "chief";
@@ -216,6 +220,28 @@ export default function Index() {
             done,
             photoUrl: u.progress.practicesDone[practiceId]?.photoUrl,
             confirmedBy: done ? currentUser?.name : undefined,
+          },
+        },
+      },
+    };
+    syncUser(updated);
+  }
+
+  // ── Cadet: attach photo to practice ──
+  function attachPracticePhoto(practiceId: string, photoUrl: string) {
+    if (!cu) return;
+    setCadetPracticePhotos(p => ({ ...p, [practiceId]: photoUrl }));
+    const u = users.find(u => u.id === cu.id)!;
+    const updated: UserRecord = {
+      ...u,
+      progress: {
+        ...u.progress,
+        practicesDone: {
+          ...u.progress.practicesDone,
+          [practiceId]: {
+            ...u.progress.practicesDone[practiceId],
+            done: u.progress.practicesDone[practiceId]?.done || false,
+            photoUrl,
           },
         },
       },
@@ -484,7 +510,62 @@ export default function Index() {
                   </div>
                 </div>
 
-                {/* Practices */}
+                {/* Practices — grouped for j2s */}
+                {cu.rank === "jr_sergeant" && (
+                  <>
+                    {[{ key: "practice", title: "Практические задания", color: "bg-secondary/30" }, { key: "exam", title: "Аттестация — экзамены", color: "bg-orange-50" }].map(group => (
+                      <div key={group.key} className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+                        <div className={`px-6 py-3 border-b border-border ${group.color}`}>
+                          <span className="font-oswald text-sm font-bold tracking-widest uppercase text-foreground">{group.title}</span>
+                        </div>
+                        <div className="divide-y divide-border">
+                          {curPractices.filter((p: typeof curPractices[0] & { group?: string }) => (p.group || "practice") === group.key).map((item: typeof curPractices[0] & { group?: string }) => {
+                            const pr = cu.progress.practicesDone[item.id];
+                            const done = !!pr?.done;
+                            const photo = pr?.photoUrl || cadetPracticePhotos[item.id];
+                            return (
+                              <div key={item.id} className={`px-6 py-4 ${done ? "bg-green-50" : ""}`}>
+                                <div className="flex items-start gap-4">
+                                  <div className={`w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 mt-0.5 ${done ? "bg-green-100 border-green-400" : "border-border bg-white"}`}>
+                                    {done && <Icon name="Check" size={11} className="text-green-600" />}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                                    <p className="text-xs text-muted-foreground">{item.desc}</p>
+                                    {done && pr?.confirmedBy && <p className="text-xs text-green-600 mt-0.5">Зачёл: {pr.confirmedBy}</p>}
+                                    {photo ? (
+                                      <div className="mt-2 flex items-start gap-2">
+                                        <img src={photo} alt="фото" className="w-24 h-24 object-cover rounded-lg border border-border shadow-sm" />
+                                        {!done && cu.role === "cadet" && (
+                                          <button onClick={() => attachPracticePhoto(item.id, "")} className="text-xs text-red-500 hover:text-red-700 font-semibold mt-1">Удалить</button>
+                                        )}
+                                      </div>
+                                    ) : cu.role === "cadet" && !done && (
+                                      <div className="mt-2">
+                                        <input type="file" accept=".jpg,.jpeg,.png" className="hidden"
+                                          ref={el => { practicePhotoRef.current[item.id] = el; }}
+                                          onChange={e => {
+                                            const f = e.target.files?.[0]; if (!f) return;
+                                            const r = new FileReader(); r.onload = ev => attachPracticePhoto(item.id, ev.target?.result as string); r.readAsDataURL(f);
+                                          }} />
+                                        <button onClick={() => practicePhotoRef.current[item.id]?.click()}
+                                          className="flex items-center gap-1.5 text-xs text-[hsl(220,60%,28%)] font-bold border border-[hsl(220,60%,28%)]/30 bg-[hsl(220,60%,28%)]/5 px-3 py-1.5 rounded-lg hover:bg-[hsl(220,60%,28%)]/10 transition-colors">
+                                          <Icon name="Camera" size={12} /> Прикрепить фото
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                {cu.rank !== "jr_sergeant" && (
                 <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
                   <div className="px-6 py-3 border-b border-border bg-secondary/30">
                     <span className="font-oswald text-sm font-bold tracking-widest uppercase text-foreground">Практические задания</span>
@@ -493,21 +574,56 @@ export default function Index() {
                     {curPractices.map(item => {
                       const pr = cu.progress.practicesDone[item.id];
                       const done = !!pr?.done;
+                      const photo = pr?.photoUrl || cadetPracticePhotos[item.id];
                       return (
-                        <div key={item.id} className={`flex items-center gap-4 px-6 py-3.5 ${done ? "bg-green-50" : ""}`}>
-                          <div className={`w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 ${done ? "bg-green-100 border-green-400" : "border-border bg-white"}`}>
-                            {done && <Icon name="Check" size={11} className="text-green-600" />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-foreground">{item.title}</p>
-                            <p className="text-xs text-muted-foreground">{item.desc}</p>
-                            {done && pr?.confirmedBy && <p className="text-xs text-green-600 mt-0.5">Зачёл: {pr.confirmedBy}</p>}
+                        <div key={item.id} className={`px-6 py-4 ${done ? "bg-green-50" : ""}`}>
+                          <div className="flex items-start gap-4">
+                            <div className={`w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 mt-0.5 ${done ? "bg-green-100 border-green-400" : "border-border bg-white"}`}>
+                              {done && <Icon name="Check" size={11} className="text-green-600" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                              <p className="text-xs text-muted-foreground">{item.desc}</p>
+                              {done && pr?.confirmedBy && <p className="text-xs text-green-600 mt-0.5">Зачёл: {pr.confirmedBy}</p>}
+
+                              {/* Photo area */}
+                              {photo ? (
+                                <div className="mt-2 flex items-start gap-2">
+                                  <img src={photo} alt="фото" className="w-24 h-24 object-cover rounded-lg border border-border shadow-sm" />
+                                  {!done && cu.role === "cadet" && (
+                                    <button onClick={() => attachPracticePhoto(item.id, "")}
+                                      className="text-xs text-red-500 hover:text-red-700 font-semibold mt-1">
+                                      Удалить
+                                    </button>
+                                  )}
+                                </div>
+                              ) : cu.role === "cadet" && !done && (
+                                <div className="mt-2">
+                                  <input
+                                    type="file" accept=".jpg,.jpeg,.png"
+                                    className="hidden"
+                                    ref={el => { practicePhotoRef.current[item.id] = el; }}
+                                    onChange={e => {
+                                      const f = e.target.files?.[0]; if (!f) return;
+                                      const r = new FileReader();
+                                      r.onload = ev => attachPracticePhoto(item.id, ev.target?.result as string);
+                                      r.readAsDataURL(f);
+                                    }}
+                                  />
+                                  <button onClick={() => practicePhotoRef.current[item.id]?.click()}
+                                    className="flex items-center gap-1.5 text-xs text-[hsl(220,60%,28%)] font-bold border border-[hsl(220,60%,28%)]/30 bg-[hsl(220,60%,28%)]/5 px-3 py-1.5 rounded-lg hover:bg-[hsl(220,60%,28%)]/10 transition-colors">
+                                    <Icon name="Camera" size={12} /> Прикрепить фото
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 </div>
+                )}
               </>
             )}
           </div>
@@ -873,16 +989,28 @@ export default function Index() {
                       {pracs.map(p => {
                         const pr = selectedCadetUser.progress.practicesDone[p.id];
                         const done = !!pr?.done;
+                        const photo = pr?.photoUrl;
                         return (
                           <div key={p.id} className={`rounded-lg border p-3.5 ${done ? "bg-green-50 border-green-200" : "bg-secondary/20 border-border"}`}>
-                            <div className="flex items-center justify-between gap-3">
-                              <div>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
                                 <p className="font-semibold text-foreground text-sm">{p.title}</p>
                                 <p className="text-xs text-muted-foreground">{p.desc}</p>
                                 {done && pr?.confirmedBy && <p className="text-xs text-green-600 mt-0.5">Зачёл: {pr.confirmedBy}</p>}
+                                {photo && (
+                                  <div className="mt-2">
+                                    <p className="text-xs text-muted-foreground font-bold uppercase tracking-wide mb-1">Фото курсанта</p>
+                                    <img src={photo} alt="фото практики" className="w-32 h-32 object-cover rounded-lg border border-border shadow-sm cursor-pointer hover:scale-105 transition-transform"
+                                      onClick={() => window.open(photo, "_blank")} />
+                                  </div>
+                                )}
+                                {!photo && (
+                                  <p className="text-xs text-muted-foreground/60 italic mt-1">Фото не прикреплено</p>
+                                )}
                               </div>
                               <button onClick={() => checkPractice(selectedCadetUser.id, p.id, !done)}
-                                className={`text-xs px-3 py-1.5 rounded-lg font-bold flex-shrink-0 transition-colors ${done ? "bg-green-100 text-green-700 border border-green-300 hover:bg-red-50 hover:text-red-600 hover:border-red-200" : "bg-[hsl(220,60%,28%)] text-white hover:bg-[hsl(220,60%,22%)]"}`}>
+                                className={`text-xs px-3 py-1.5 rounded-lg font-bold flex-shrink-0 transition-colors ${done ? "bg-green-100 text-green-700 border border-green-300 hover:bg-red-50 hover:text-red-600 hover:border-red-200" : photo ? "bg-[hsl(220,60%,28%)] text-white hover:bg-[hsl(220,60%,22%)]" : "bg-secondary text-muted-foreground border border-border cursor-not-allowed"}`}
+                                title={!photo && !done ? "Курсант ещё не прикрепил фото" : ""}>
                                 {done ? "Зачтено ✓" : "Зачесть"}
                               </button>
                             </div>
